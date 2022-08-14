@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path"
 
 	log "github.com/sirupsen/logrus"
 
@@ -10,7 +12,15 @@ import (
 	"gorm.io/gorm"
 )
 
+const PostGresCertName = "db_cert.pem"
+
 func getDB(config *Config) *gorm.DB {
+	dbCertPath := path.Join(config.SecureEnclavePath, PostGresCertName)
+	log.WithField("DB_PATH", dbCertPath).Info("start load DB Cert")
+	if err := ValidateConfigPath(dbCertPath); err != nil {
+		log.Info("start build cert file to secure enclave")
+		ioutil.WriteFile(dbCertPath, toByte(config.Postgress.SSLRootCert), 0466)
+	}
 
 	dsn := fmt.Sprintf(
 		"host=%s port=30025 user=%s dbname=%s password=%s sslrootcert=%s sslmode=verify-full TimeZone=Asia/Shanghai",
@@ -18,7 +28,7 @@ func getDB(config *Config) *gorm.DB {
 		config.Postgress.Username,
 		config.Postgress.Dbname,
 		config.Postgress.Password,
-		config.Postgress.SSLRootCert,
+		dbCertPath,
 	)
 	log.Println(dsn)
 

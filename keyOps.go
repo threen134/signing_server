@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"path"
 
 	"github.com/IBM-Cloud/hpcs-grep11-go/ep11"
 	pb "github.com/IBM-Cloud/hpcs-grep11-go/grpc"
@@ -55,7 +56,7 @@ func (v *VerifyBody) String() string {
 // generate EC key pair
 func generageECkeyPair(ctx *gin.Context) {
 	log.Info("start generte EC key")
-	aes, err := loadAesKEK("./secureEnclave/kek.key")
+	aes, err := loadAesKEK()
 	if err != nil {
 		ctx.AbortWithError(500, err)
 	}
@@ -136,7 +137,7 @@ func importAESKey(ctx *gin.Context) {
 
 // importECfile
 func importECKey(ctx *gin.Context) {
-	aes, err := loadAesKEK("./secureEnclave/kek.key")
+	aes, err := loadAesKEK()
 	if err != nil {
 		ctx.AbortWithError(500, err)
 	}
@@ -392,7 +393,7 @@ func verifyImportAESKey(ctx *gin.Context) {
 
 // sign by private key
 func sign(ctx *gin.Context) {
-	aes, err := loadAesKEK("./secureEnclave/kek.key")
+	aes, err := loadAesKEK()
 	if err != nil {
 		ctx.AbortWithError(500, err)
 	}
@@ -450,7 +451,7 @@ func sign(ctx *gin.Context) {
 
 // sign by private key
 func sign_EC(ctx *gin.Context) {
-	// aes, err := loadAesKEK("./secureEnclave/kek.key")
+	// aes, err := loadAesKEK("")
 	// if err != nil {
 	// 	ctx.AbortWithError(500, err)
 	// }
@@ -540,7 +541,8 @@ func getMechanismInfo(ctx *gin.Context) {
 	ctx.String(http.StatusOK, mc)
 }
 
-func loadAesKEK(kekPath string) ([]byte, error) {
+func loadAesKEK() ([]byte, error) {
+	kekPath := path.Join(getGlobal().cfg.SecureEnclavePath, "KEK.key")
 	if len(kek) != 0 {
 		return kek, nil
 	}

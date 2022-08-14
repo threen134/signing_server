@@ -25,6 +25,7 @@ type Config struct {
 		IAMKey      string `yaml:"iam_key"`
 		IAMEndpoint string `yaml:"iam_endpoint"`
 	}
+	SecureEnclavePath string `yaml:"secure_enclave_path"` 
 }
 
 // NewConfig returns a new decoded Config struct
