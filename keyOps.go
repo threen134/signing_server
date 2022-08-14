@@ -11,8 +11,11 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 
 	"github.com/IBM-Cloud/hpcs-grep11-go/ep11"
@@ -23,7 +26,8 @@ import (
 )
 
 type SignBody struct {
-	Data string
+	Data   string
+	Format string `json:"sig_format"`
 }
 
 type ImportKeyBody struct {
@@ -82,8 +86,6 @@ func generageECkeyPair(ctx *gin.Context) {
 		"public":  encryptedPrivateKeyStr,
 		"private": pubKeyStr,
 	})
-
-	ctx.String(http.StatusOK, keys.Uuid)
 }
 
 // sign by private key
@@ -130,6 +132,223 @@ func importAESKey(ctx *gin.Context) {
 		"uuid":    keys.Uuid,
 		"private": keys.PrivateKey,
 	})
+}
+
+// importECfile
+func importECKey(ctx *gin.Context) {
+	aes, err := loadAesKEK("./secureEnclave/kek.key")
+	if err != nil {
+		ctx.AbortWithError(500, err)
+	}
+
+	file, header, err := ctx.Request.FormFile("file")
+	if err != nil {
+		log.WithError(err).Error("failed to read file")
+		ctx.AbortWithError(400, err)
+	}
+	log.WithField("file-name", header.Filename).Info("read ke from file")
+
+	bf := &bytes.Buffer{}
+	io.Copy(bf, file)
+	log.Info(string(bf.Bytes()))
+
+	ecPrivateKeyPem, err := ioutil.ReadFile("./ec256-key-pair.pem")
+	if err != nil {
+		panic(err)
+	}
+
+	//ecPrivateKeyPem := bf.Bytes()
+	block, _ := pem.Decode(ecPrivateKeyPem)
+
+	//解析 ASN.1 ec key
+	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		log.WithError(err).Error("failed to parse ec key")
+		ctx.AbortWithError(500, err)
+	}
+
+	//转 pkcs8 格式
+	ecPrivateKey, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		log.WithError(err).Error("failed to change key to pcsk8 format")
+		ctx.AbortWithError(500, err)
+	}
+
+	// 解析pub key
+	pub := &privateKey.PublicKey
+	pubBlock, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		log.WithError(err).Error("failed to decode public key")
+		ctx.AbortWithError(500, err)
+	}
+	// generate aes to to encrypted
+	tempAESKey, err := generateAESKey()
+	if err != nil {
+		log.WithError(err).Error("failed to generate temp AES key")
+		ctx.AbortWithError(500, err)
+	}
+
+	iv, err := generateIV()
+	if err != nil {
+		log.WithError(err).Error("failed to generate iv")
+		ctx.AbortWithError(500, err)
+	}
+
+	encryptedImportedECKey, err := encryptAESCBC(tempAESKey, ecPrivateKey, iv)
+	if err != nil {
+		log.WithError(err).Error("failed to encrypted imported AES key")
+		ctx.AbortWithError(500, err)
+	}
+	log.WithField("encryptedEC", toString(encryptedImportedECKey)).Info("encrypted success")
+	unwrappedECKey, err := unwrapECkey(encryptedImportedECKey, tempAESKey, iv)
+	if err != nil {
+		log.WithError(err).Error("failed to unwrap EC key")
+		ctx.AbortWithError(500, err)
+	}
+	encryptedUnwrappedPrivateKey, err := encryptAES(aes, unwrappedECKey)
+	if err != nil {
+		ctx.AbortWithError(500, err)
+	}
+
+	encryptedUnwrappedPrivateKeyStr := toString(encryptedUnwrappedPrivateKey)
+	pubBlockStr := toString(pubBlock)
+	log.WithField("importkey", encryptedUnwrappedPrivateKeyStr).WithField("pub", pubBlockStr).Info("unwrap key success")
+	keys, err := insertKey(
+		getGlobal().db,
+		encryptedUnwrappedPrivateKeyStr,
+		pubBlockStr,
+	)
+
+	if err != nil {
+		log.WithError(err).Error("failed to insert EC key")
+		ctx.AbortWithError(500, err)
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"uuid":    keys.Uuid,
+		"private": keys.PrivateKey,
+		"public":  keys.PublicKey,
+	})
+}
+
+// importECfile
+func importECKey2(ctx *gin.Context) {
+	file, header, err := ctx.Request.FormFile("file")
+	if err != nil {
+		log.WithError(err).Error("failed to read file")
+		ctx.AbortWithError(400, err)
+	}
+	log.WithField("file-name", header.Filename).Info("read ke from file")
+
+	bf := &bytes.Buffer{}
+	io.Copy(bf, file)
+	log.Info(string(bf.Bytes()))
+
+	ecPrivateKeyPem, err := ioutil.ReadFile("./ec256-key-pair.pem")
+	if err != nil {
+		panic(err)
+	}
+
+	//ecPrivateKeyPem := bf.Bytes()
+	block, _ := pem.Decode(ecPrivateKeyPem)
+
+	//解析 ASN.1 ec key
+	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		log.WithError(err).Error("failed to parse ec key")
+		ctx.AbortWithError(500, err)
+	}
+
+	//转 pkcs8 格式
+	ecPrivateKey, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		log.WithError(err).Error("failed to change key to pcsk8 format")
+		ctx.AbortWithError(500, err)
+	}
+
+	// 解析pub key
+	pub := &privateKey.PublicKey
+	pubBlock, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		log.WithError(err).Error("failed to decode public key")
+		ctx.AbortWithError(500, err)
+	}
+	// generate kek
+	tempAESKey, err := generateAESKey()
+	if err != nil {
+		log.WithError(err).Error("failed to generate temp AES key")
+		ctx.AbortWithError(500, err)
+	}
+
+	iv, err := generateIV()
+	if err != nil {
+		log.WithError(err).Error("failed to generate iv")
+		ctx.AbortWithError(500, err)
+	}
+
+	encryptedImportedECKey, err := encryptAESCBC(tempAESKey, ecPrivateKey, iv)
+	if err != nil {
+		log.WithError(err).Error("failed to encrypted imported AES key")
+		ctx.AbortWithError(500, err)
+	}
+	log.WithField("encryptedEC", toString(encryptedImportedECKey)).Info("encrypted success")
+	unwrappedECKey, err := unwrapECkey(encryptedImportedECKey, tempAESKey, iv)
+	if err != nil {
+		log.WithError(err).Error("failed to unwrap EC key")
+		ctx.AbortWithError(500, err)
+	}
+
+	unwrappedECKeyStr := toString(unwrappedECKey)
+	pubBlockStr := toString(pubBlock)
+	log.WithField("importkey", unwrappedECKeyStr).WithField("pub", pubBlockStr).Info("unwrap key success")
+	keys, err := insertKey(
+		getGlobal().db,
+		unwrappedECKeyStr,
+		pubBlockStr,
+	)
+
+	if err != nil {
+		log.WithError(err).Error("failed to insert EC key")
+		ctx.AbortWithError(500, err)
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"uuid":    keys.Uuid,
+		"private": keys.PrivateKey,
+		"public":  keys.PublicKey,
+	})
+}
+
+func unwrapECkey(encryptedPrivateKey, tempAESKey, iv []byte) ([]byte, error) {
+	conn, err := getGlobal().grpcClient()
+	if err != nil {
+		return nil, fmt.Errorf("could not connect to server: %s", err)
+	}
+	defer conn.Close()
+
+	keyLen := 128 // bits
+	ecUnwrapKeyTemplate := ep11.EP11Attributes{
+		ep11.CKA_KEY_TYPE:    ep11.CKK_EC,
+		ep11.CKA_VALUE_LEN:   keyLen / 8,
+		ep11.CKA_SIGN:        true,
+		ep11.CKA_ENCRYPT:     true,
+		ep11.CKA_DECRYPT:     true,
+		ep11.CKA_SENSITIVE:   true,
+		ep11.CKA_EXTRACTABLE: false, // set to false!
+	}
+
+	unwrapRequest := &pb.UnwrapKeyRequest{
+		Mech:     &pb.Mechanism{Mechanism: ep11.CKM_AES_CBC_PAD, Parameter: util.SetMechParm(iv)},
+		KeK:      tempAESKey,
+		Wrapped:  encryptedPrivateKey,
+		Template: util.AttributeMap(ecUnwrapKeyTemplate),
+	}
+	cryptoClient := pb.NewCryptoClient(conn)
+
+	// Unwrap the AES key
+	unwrappedResponse, err := cryptoClient.UnwrapKey(context.Background(), unwrapRequest)
+	if err != nil {
+		return nil, err
+	}
+	return unwrappedResponse.UnwrappedBytes, nil
 }
 
 func verifyImportAESKey(ctx *gin.Context) {
@@ -193,6 +412,64 @@ func sign(ctx *gin.Context) {
 		log.WithError(err).Error("failed to decrypt private key")
 		ctx.AbortWithError(500, err)
 	}
+	data := bytes.NewBufferString(requestBody.Data).Bytes()
+	sig, err := signEC(privatekey, data)
+	if err != nil {
+		log.WithError(err).Error("failed to sign data")
+		ctx.AbortWithError(500, err)
+	}
+	if requestBody.Format == "ans1" {
+		log.Info("change to ANS1 format")
+		// ep11 returns a raw signature byte array that must be encoded to ASN1 for tls package usage.
+		var sigLen = len(sig)
+		if sigLen%2 != 0 {
+			err = fmt.Errorf("Signature length is not even: [%d]", sigLen)
+			ctx.AbortWithError(500, err)
+		}
+		r := new(big.Int)
+		s := new(big.Int)
+
+		type ecdsaSignature struct {
+			R, S *big.Int
+		}
+
+		r.SetBytes(sig[0 : sigLen/2])
+		s.SetBytes(sig[sigLen/2:])
+		sig, err = asn1.Marshal(ecdsaSignature{r, s})
+		if err != nil {
+			log.WithError(err).Error("fail change ans1.format")
+			ctx.AbortWithError(500, err)
+		}
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"uuid":      keystore.Uuid,
+		"action":    "sign",
+		"signature": toString(sig),
+	})
+}
+
+// sign by private key
+func sign_EC(ctx *gin.Context) {
+	// aes, err := loadAesKEK("./secureEnclave/kek.key")
+	// if err != nil {
+	// 	ctx.AbortWithError(500, err)
+	// }
+	requestBody := SignBody{}
+
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		log.WithError(err).Error("fail to read json body")
+		ctx.AbortWithError(400, err)
+	}
+
+	keyUUID := ctx.Param("id")
+	keystore := getKeyByUUID(getGlobal().db, keyUUID)
+	log.WithField("key_uuid", keyUUID).WithField("data", requestBody.Data).Info("start sign")
+	privatekey := toByte(keystore.PrivateKey)
+	// privatekey, err := decryptAES(aes, rawPrivate)
+	// if err != nil {
+	// 	log.WithError(err).Error("failed to decrypt private key")
+	// 	ctx.AbortWithError(500, err)
+	// }
 	data := bytes.NewBufferString(requestBody.Data).Bytes()
 	sig, err := signEC(privatekey, data)
 	if err != nil {
@@ -466,7 +743,7 @@ func generateECKeyPair() (public, private []byte, err error) {
 	defer conn.Close()
 
 	cryptoClient := pb.NewCryptoClient(conn)
-	ecParameters, err := asn1.Marshal(util.OIDNamedCurveED25519)
+	ecParameters, err := asn1.Marshal(util.OIDNamedCurveP256)
 	if err != nil {
 		log.WithError(err).Error("unable to encode parameter OID")
 		return nil, nil, err
@@ -482,7 +759,7 @@ func generateECKeyPair() (public, private []byte, err error) {
 		ep11.CKA_EXTRACTABLE: false,
 	}
 	generateKeyPairRequest := &pb.GenerateKeyPairRequest{
-		Mech:            &pb.Mechanism{Mechanism: ep11.CKM_EC_KEY_PAIR_GEN},
+		Mech:            &pb.Mechanism{Mechanism: ep11.CKM_ECDSA_KEY_PAIR_GEN},
 		PubKeyTemplate:  util.AttributeMap(publicKeyTemplate),
 		PrivKeyTemplate: util.AttributeMap(privateKeyTemplate),
 	}
@@ -496,7 +773,7 @@ func generateECKeyPair() (public, private []byte, err error) {
 }
 
 func signEC(privateKey, data []byte) (signature []byte, err error) {
-	log.Info("us ec to sign data")
+	log.WithField("privatekey", toString(privateKey)).WithField("data", string(data)).Info("us ec to sign data")
 	conn, err := getGlobal().grpcClient()
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to server: %s", err)
@@ -506,7 +783,7 @@ func signEC(privateKey, data []byte) (signature []byte, err error) {
 	cryptoClient := pb.NewCryptoClient(conn)
 
 	signRequest := &pb.SignSingleRequest{
-		Mech:    &pb.Mechanism{Mechanism: ep11.CKM_IBM_ED25519_SHA512},
+		Mech:    &pb.Mechanism{Mechanism: ep11.CKM_ECDSA},
 		PrivKey: privateKey,
 		Data:    data,
 	}
@@ -531,7 +808,7 @@ func verifyEC(signature, pubKey, data []byte) (bool, error) {
 	cryptoClient := pb.NewCryptoClient(conn)
 
 	verifySingleRequest := &pb.VerifySingleRequest{
-		Mech:      &pb.Mechanism{Mechanism: ep11.CKM_IBM_ED25519_SHA512},
+		Mech:      &pb.Mechanism{Mechanism: ep11.CKM_ECDSA},
 		PubKey:    pubKey,
 		Data:      data,
 		Signature: signature,

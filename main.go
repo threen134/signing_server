@@ -27,6 +27,9 @@ func main() {
 	// import aes key
 	router.POST("/v1/grep11/key/import_aes", importAESKey)
 
+	// import ec key
+	router.POST("/v1/grep11/key/import_ec", importECKey)
+
 	// verify imported aes key
 	router.POST("/v1/grep11/key/verify_import_aes/:id", verifyImportAESKey)
 
