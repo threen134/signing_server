@@ -153,12 +153,12 @@ func importECKey(ctx *gin.Context) {
 	io.Copy(bf, file)
 	log.Info(string(bf.Bytes()))
 
-	ecPrivateKeyPem, err := ioutil.ReadFile("./ec256-key-pair.pem")
-	if err != nil {
-		panic(err)
-	}
+	// ecPrivateKeyPem, err := ioutil.ReadFile("./ec256-key-pair.pem")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	//ecPrivateKeyPem := bf.Bytes()
+	ecPrivateKeyPem := bf.Bytes()
 	block, _ := pem.Decode(ecPrivateKeyPem)
 
 	//解析 ASN.1 ec key
