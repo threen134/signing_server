@@ -1,4 +1,4 @@
-module example.com
+module signing_server
 
 go 1.17
 
