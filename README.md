@@ -71,5 +71,9 @@ openssl pkeyutl -verify -in test.data -sigfile  signature.sig  -pubin  -inkey ec
 
 
 ```
-# GREP11 API 使用举例时序图
+# GREP11 API 使用举例时序图与说明
 ![](./img/GREP11%20API%20%20使用场景说明-详细版本.jpg)
+
+
+# GREP11 AP1 导入私钥时序图与说明
+![](./img/grep11_import_key.jpg)
