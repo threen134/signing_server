@@ -18,7 +18,7 @@ curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/private/${KEY_UUID} -s | jq
 curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/sign/${KEY_UUID}  -s -X POST -d '{"data":"the text need to encrypted to verify kay."}'
 
 # 使用公钥验证签名
-curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/verify/${KEY_UUID}  -s -X POST -d '{"data":"the text need to encrypted to verify kay.","signature":"guoQxLxqOYUbZ2O7jgbLnte4XA0SxSD0xj0/m6SVI0PaIBODQ/WJEZ+By2XqFzrRJyUUc8XFrXcLfHTjFmJjlA"}' |jq
+curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/verify/${KEY_UUID}  -s -X POST -d '{"data":"the text need to encrypted to verify kay.","signature":"Qq2T0zMfp4BtpAURsIdBuHIX/PhdMMYbvYlP8OmYPCZCj+uJi7b5SLrihIFwH4+bPC5fCXB2ZVoNw1i0qG+oBw"}' |jq
 
 
 # 使用master key包裹导入的AES，并持久化到HPDBaaS
