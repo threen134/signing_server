@@ -1,0 +1,27 @@
+type: workload
+auths:
+  au.icr.io:
+    password: Do0JROuGXO2U-b.....
+    username: iamapikey
+compose:
+  archive: H4sIAOG4/GIAA+3TTW+CMB......
+images:
+  dct:
+    au.icr.io/spark-demo/s390x-signing-server:
+      notary: "https://notary.au.icr.io"
+      publicKey: LS0tLS1CRUdJT.....
+env:
+  POSTGRESS_ADDRESS: "dbaas905.hyperp....."
+  POSTGRESS_PORT: "30025"
+  POSTGRESS_USERNAME: ""
+  POSTGRESS_DBNAME: ""
+  HPCS_ADDRESS: ep11.us-east....
+  HPCS_PORT: "13412"
+  HPCS_INSTANCE_ID: "4ad01aec-dc81-....."
+  HPCS_IAM_ENDPOINT: "https://iam.cloud.ibm.com"
+  SECURE_ENCLAVE_PATH: "/etc/secure_enclave"
+volumes:
+  volume1:
+    mount: /etc/secure_enclave
+    seed: stsolutiontest
+    filesystem: btrfs
