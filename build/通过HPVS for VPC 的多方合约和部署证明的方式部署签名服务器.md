@@ -291,8 +291,7 @@ echo "hyper-protect-basic.${ENCRYPTED_PASSWORD}.${ENCRYPTED_ENV}"
 <img src="./img/3.jpg" width="500" alt="图片名称" align=center>
 
 ### 1.9.4. 验证应用部署
-挂载一个floating IP 到部署的签名服务器
-可以挂一个FIP上去，验证是否nginx工作正常
+挂载一个floating IP 到部署的签名服务器, 然后list 状态机·
 ```sh
 curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/get_mechanismsc
 ```
