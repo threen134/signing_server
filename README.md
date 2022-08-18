@@ -48,7 +48,7 @@
  签名服务器展示[Hyper Protect Service](https://ibm-hyper-protect.github.io/) 的使用场景
 
 ## 1.1. 环境介绍
-![](./img/setup.jpg)
+![](./img/5.jpg)
 - 通过类似多方合约的方式部署签名服务器到可信执行环境HPVS 
 - Client 通过RestAPI与签名服务器通信 （生产环境还需要TLS证书验证）
 - 由于签名服务器是以黑盒子的方式部署到HPVS内的，这里log信息通过内网发送到logDNA对log进行收集与可视化检索。
