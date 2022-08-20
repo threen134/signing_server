@@ -5,11 +5,15 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -22,13 +26,22 @@ import (
 	"github.com/IBM-Cloud/hpcs-grep11-go/ep11"
 	pb "github.com/IBM-Cloud/hpcs-grep11-go/grpc"
 	"github.com/IBM-Cloud/hpcs-grep11-go/util"
+	"github.com/ecadlabs/signatory/pkg/cryptoutils"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
 type SignBody struct {
-	Data   string
+	Data   string //########################## TBD
 	Format string `json:"sig_format"`
+}
+
+type VeifyEthereumPubKeyBody struct {
+	Data           string `json:"data"`
+	EthereumPubKey string `json:"ethereum_pub_key"`
 }
 
 type ImportKeyBody struct {
@@ -65,6 +78,7 @@ func generageECkeyPair(ctx *gin.Context) {
 	if err != nil {
 		ctx.AbortWithError(500, err)
 	}
+	log.WithField("wrapped-key", toString(privateKey)).Info("get wrapped key")
 
 	encryptedPrivateKey, err := encryptAES(aes, privateKey)
 	if err != nil {
@@ -84,8 +98,8 @@ func generageECkeyPair(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"uuid":    keys.Uuid,
-		"public":  encryptedPrivateKeyStr,
-		"private": pubKeyStr,
+		"public":  pubKeyStr,
+		"private": encryptedPrivateKeyStr,
 	})
 }
 
@@ -514,6 +528,91 @@ func findKeyByUUID(ctx *gin.Context) {
 	ctx.AbortWithError(400, fmt.Errorf("invalid key type"))
 }
 
+func getEthereumKey(ctx *gin.Context) {
+	keyUUID := ctx.Param("id")
+	if keyUUID == "" {
+		ctx.AbortWithError(400, fmt.Errorf("invalid key id"))
+	}
+
+	key := getKeyByUUID(getGlobal().db, keyUUID)
+	if key == nil {
+		ctx.AbortWithError(400, fmt.Errorf("invalid key id"))
+	}
+	pubKeyBytes := toByte(key.PublicKey)
+	log.WithField("pubKeyBytes", toString(pubKeyBytes)).Info("get pub key bytes")
+
+	_, publicKey, err := Convert(pubKeyBytes, util.OIDNamedCurveSecp256k1)
+	if err != nil {
+		log.WithError(err).Error("fail to convert")
+		ctx.AbortWithError(500, fmt.Errorf("fail to convert"))
+		return
+	}
+
+	ethereumPublick := crypto.FromECDSAPub(publicKey)
+	hexEthereumPublick := hexutil.Encode(ethereumPublick)
+	log.WithField("len", len(ethereumPublick)).WithField("key", hexEthereumPublick).Info("EthereumKey public key")
+
+	address := crypto.PubkeyToAddress(*publicKey).Hex()
+	log.WithField("ethereum_address", address).Info("address")
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"uuid":              key.Uuid,
+		"type":              "EthereumKey",
+		"EthereumPublicKey": hexEthereumPublick,
+		"format":            "hex",
+		"address":           address,
+	})
+}
+
+func verifyEthereumKey(ctx *gin.Context) {
+	keyUUID := ctx.Param("id")
+	if keyUUID == "" {
+		ctx.AbortWithError(400, fmt.Errorf("invalid key id"))
+	}
+	requestBody := VeifyEthereumPubKeyBody{}
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		log.WithError(err).Error("fail to read json body")
+		ctx.AbortWithError(400, err)
+	}
+
+	aes, err := loadAesKEK()
+	if err != nil {
+		ctx.AbortWithError(500, err)
+	}
+
+	keystore := getKeyByUUID(getGlobal().db, keyUUID)
+	if keystore == nil {
+		ctx.AbortWithError(400, fmt.Errorf("invalid key id"))
+	}
+
+	log.WithField("key_uuid", keyUUID).WithField("privatekey", keystore.PrivateKey).WithField("sign data", requestBody.Data).Info("start sign")
+
+	rawPrivate := toByte(keystore.PrivateKey)
+	privatekey, err := decryptAES(aes, rawPrivate)
+	if err != nil {
+		log.WithError(err).Error("failed to decrypt private key")
+		ctx.AbortWithError(500, err)
+	}
+	data := bytes.NewBufferString(requestBody.Data).Bytes()
+
+	sig, err := signEC(privatekey, data)
+	if err != nil {
+		log.WithError(err).Error("failed to sign data")
+		ctx.AbortWithError(500, err)
+	}
+
+	pubkey, err := hexutil.Decode(requestBody.EthereumPubKey)
+	if err != nil {
+		log.WithError(err).Error("failed to debug public key")
+		ctx.AbortWithError(500, err)
+	}
+
+	result := crypto.VerifySignature(pubkey, []byte(requestBody.Data), sig)
+	ctx.JSON(http.StatusOK, gin.H{
+		"result": result,
+	})
+}
+
 func verifySignature(ctx *gin.Context) {
 	requestBody := VerifyBody{}
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -745,7 +844,7 @@ func generateECKeyPair() (public, private []byte, err error) {
 	defer conn.Close()
 
 	cryptoClient := pb.NewCryptoClient(conn)
-	ecParameters, err := asn1.Marshal(util.OIDNamedCurveP256)
+	ecParameters, err := asn1.Marshal(util.OIDNamedCurveSecp256k1)
 	if err != nil {
 		log.WithError(err).Error("unable to encode parameter OID")
 		return nil, nil, err
@@ -893,7 +992,7 @@ func chunkSlice(slice []byte, chunkSize int) [][]byte {
 	return chunks
 }
 
-//AesEncrypt 加密
+// AesEncrypt 加密
 func AesEncryptLocal(data []byte, key []byte, iv []byte) ([]byte, error) {
 	//创建加密实例
 	block, err := aes.NewCipher(key)
@@ -913,7 +1012,7 @@ func AesEncryptLocal(data []byte, key []byte, iv []byte) ([]byte, error) {
 	return crypted, nil
 }
 
-//pkcs7Padding 填充
+// pkcs7Padding 填充
 func pkcs7Padding(data []byte, blockSize int) []byte {
 	//判断缺少几位长度。最少1，最多 blockSize
 	padding := blockSize - len(data)%blockSize
@@ -929,4 +1028,44 @@ func toString(src []byte) string {
 func toByte(src string) []byte {
 	result, _ := base64.RawStdEncoding.DecodeString(src)
 	return result
+}
+
+type EckeyIdentASN struct {
+	KeyType asn1.ObjectIdentifier
+	Curve   asn1.ObjectIdentifier
+}
+type PubKeyASN struct {
+	Ident EckeyIdentASN
+	Point asn1.BitString
+}
+
+func Convert(pubKey []byte /*hsm respone中的public key*/, curve asn1.ObjectIdentifier) ([]byte, *ecdsa.PublicKey, error) {
+	nistCurve := GetNamedCurveFromOID(curve)
+	if curve == nil {
+		return nil, nil, fmt.Errorf("could not recognize Curve from OID")
+	}
+
+	decode := &PubKeyASN{}
+	_, err := asn1.Unmarshal(pubKey, decode)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed unmarshalling public key: [%s]", err)
+	}
+
+	hash := sha256.Sum256(decode.Point.Bytes)
+	ski := hash[:]
+
+	x, y := elliptic.Unmarshal(nistCurve, decode.Point.Bytes)
+	if x == nil {
+		return nil, nil, fmt.Errorf("failed unmarshalling public key.\n%s", hex.Dump(decode.Point.Bytes))
+	}
+
+	return ski, &ecdsa.PublicKey{Curve: nistCurve, X: x, Y: y}, nil
+}
+
+// GetNamedCurveFromOID returns an elliptic curve from the specified curve OID
+func GetNamedCurveFromOID(oid asn1.ObjectIdentifier) elliptic.Curve {
+	if oid.Equal(util.OIDNamedCurveSecp256k1) {
+		return secp256k1.S256()
+	}
+	return util.GetNamedCurveFromOID(oid)
 }
