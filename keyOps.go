@@ -26,7 +26,6 @@ import (
 	"github.com/IBM-Cloud/hpcs-grep11-go/ep11"
 	pb "github.com/IBM-Cloud/hpcs-grep11-go/grpc"
 	"github.com/IBM-Cloud/hpcs-grep11-go/util"
-	"github.com/ecadlabs/signatory/pkg/cryptoutils"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
@@ -427,8 +426,12 @@ func sign(ctx *gin.Context) {
 		log.WithError(err).Error("failed to decrypt private key")
 		ctx.AbortWithError(500, err)
 	}
-	data := bytes.NewBufferString(requestBody.Data).Bytes()
-	sig, err := signEC(privatekey, data)
+	// data, err := hexutil.Decode(requestBody.Data)
+	// if err != nil {
+	// 	log.WithError(err).Error("failed to decrypt private key")
+	// 	ctx.AbortWithError(500, err)
+	// }
+	sig, err := signEC(privatekey, toByte(requestBody.Data))
 	if err != nil {
 		log.WithError(err).Error("failed to sign data")
 		ctx.AbortWithError(500, err)
@@ -623,8 +626,8 @@ func verifySignature(ctx *gin.Context) {
 	log.WithField("requestBody", requestBody).Info("start sign")
 	keyUUID := ctx.Param("id")
 	keystore := getKeyByUUID(getGlobal().db, keyUUID)
-	data := bytes.NewBufferString(requestBody.Data).Bytes()
-	result, err := verifyEC(toByte(requestBody.Signature), toByte(keystore.PublicKey), data)
+	//data := bytes.NewBufferString(requestBody.Data).Bytes()
+	result, err := verifyEC(toByte(requestBody.Signature), toByte(keystore.PublicKey), toByte(requestBody.Data))
 	if err != nil {
 		log.WithError(err).Error("failed to verify signature")
 		ctx.AbortWithError(500, err)
@@ -1030,35 +1033,24 @@ func toByte(src string) []byte {
 	return result
 }
 
-type EckeyIdentASN struct {
-	KeyType asn1.ObjectIdentifier
-	Curve   asn1.ObjectIdentifier
-}
-type PubKeyASN struct {
-	Ident EckeyIdentASN
-	Point asn1.BitString
-}
-
+// ecPubKeyASN defines the ECDSA public key ASN1 encoding structure for GREP11
 func Convert(pubKey []byte /*hsm respone中的public key*/, curve asn1.ObjectIdentifier) ([]byte, *ecdsa.PublicKey, error) {
 	nistCurve := GetNamedCurveFromOID(curve)
 	if curve == nil {
 		return nil, nil, fmt.Errorf("could not recognize Curve from OID")
 	}
-
-	decode := &PubKeyASN{}
-	_, err := asn1.Unmarshal(pubKey, decode)
+	bitPoint, err := util.GetPubkeyBytesFromSPKI(pubKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed unmarshalling public key: [%s]", err)
 	}
 
-	hash := sha256.Sum256(decode.Point.Bytes)
+	hash := sha256.Sum256(bitPoint)
 	ski := hash[:]
 
-	x, y := elliptic.Unmarshal(nistCurve, decode.Point.Bytes)
+	x, y := elliptic.Unmarshal(nistCurve, bitPoint)
 	if x == nil {
-		return nil, nil, fmt.Errorf("failed unmarshalling public key.\n%s", hex.Dump(decode.Point.Bytes))
+		return nil, nil, fmt.Errorf("failed unmarshalling public key.\n%s", hex.Dump(bitPoint))
 	}
-
 	return ski, &ecdsa.PublicKey{Curve: nistCurve, X: x, Y: y}, nil
 }
 
