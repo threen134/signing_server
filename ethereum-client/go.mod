@@ -6,6 +6,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.21
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/sirupsen/logrus v1.9.0
+	github.com/vrischmann/envconfig v1.3.0
 )
 
 require (

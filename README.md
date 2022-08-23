@@ -41,7 +41,15 @@
     - [2.9.3. 通过logDNA 查看部署情况](#293-通过logdna-查看部署情况)
     - [2.9.4. 验证应用部署](#294-验证应用部署)
   - [2.10. 通过明文模版部署应用](#210-通过明文模版部署应用)
-  - [2.11. 参考文档](#211-参考文档)
+- [3. 使用HPCS签名交易，并上测试链广播交易](#3-使用hpcs签名交易并上测试链广播交易)
+  - [3.1. 主要步骤说明](#31-主要步骤说明)
+    - [3.1.1. 通过HPCS 产生 钱包](#311-通过hpcs-产生-钱包)
+    - [3.1.2. 申请测试币](#312-申请测试币)
+    - [3.1.3. 获取一个目标地址](#313-获取一个目标地址)
+    - [3.1.4. 使用 ethereum-client 广播交易到 测试链 rinkeby](#314-使用-ethereum-client-广播交易到-测试链-rinkeby)
+    - [3.1.5. 在测试链上签名交易](#315-在测试链上签名交易)
+    - [3.1.6. 查看交易结果](#316-查看交易结果)
+  - [3.2. 参考文档](#32-参考文档)
 
 # 1. 签名服务器
  
@@ -463,8 +471,45 @@ env: |
     HPCS_IAM_KEY: "3lHSZqcuCh4b_....
 ```
 
+# 3. 使用HPCS签名交易，并上测试链广播交易
+## 3.1. 主要步骤说明
+### 3.1.1. 通过HPCS 产生 钱包
+```sh
 
-## 2.11. 参考文档
+export SIGN_HOST=localhost
+export SIGNING_PORT=8080
+curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/secp256k1/generate_key_pair -X POST -s | jq
+# 获取钱吧的UUID并设置到环境变量
+export KEY_UUID=c006f05e-002c-4fcf-b530-6e9820db03db
+#获取 from_address 交易地址
+curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/secp256k1/get_ethereum_key/${KEY_UUID}  -s | jq
+```
+
+### 3.1.2. 申请测试币
+ 拿到上一步产生的地址，在[水管](https://fauceth.komputing.org/)上申请`rinkeby`测试币
+### 3.1.3. 获取一个目标地址
+ 获取一个目标交易地址, 或者通过上面的步骤生产一个新的钱包并获取 `to address`
+### 3.1.4. 使用 ethereum-client 广播交易到 测试链 rinkeby
+- 加载环境变量
+```sh
+cd ./ethereum-client
+cp ./env.sh.template ./env.sh
+# 编辑env.sh
+source ./ethereum-client/env.sh
+```
+
+### 3.1.5. 在测试链上签名交易
+```sh 
+  go run ./... 
+  # 得到输出
+  https://rinkeby.etherscan.io/tx/0x71231d85bfa7497f09a54023535874779a3e73a2c0084fa8a1612f9cb709a7a1 
+```
+
+### 3.1.6. 查看交易结果
+
+![6](./img/6.jpg)
+
+## 3.2. 参考文档
 - [About the contract](https://cloud.ibm.com/docs/vpc?topic=vpc-about-contract_se#hpcr_contract_encrypt_workload)
 - [signing-images-with-docker-content-trust](https://docs.docker.com/engine/security/trust/#signing-images-with-docker-content-trust) 
 - [How to Sign Your Docker Images](https://www.cloudsavvyit.com/12388/how-to-sign-your-docker-images-to-increase-trust)
