@@ -49,7 +49,7 @@
     - [3.1.4. 使用 ethereum-client 广播交易到 测试链 rinkeby](#314-使用-ethereum-client-广播交易到-测试链-rinkeby)
     - [3.1.5. 在测试链上签名交易](#315-在测试链上签名交易)
     - [3.1.6. 查看交易结果](#316-查看交易结果)
-  - [3.2. 参考文档](#32-参考文档)
+- [4. 参考文档](#4-参考文档)
 
 # 1. 签名服务器
  
@@ -486,9 +486,9 @@ curl ${SIGN_HOST}:${SIGNING_PORT}/v1/grep11/key/secp256k1/get_ethereum_key/${KEY
 ```
 
 ### 3.1.2. 申请测试币
- 拿到上一步产生的地址，在[水管](https://fauceth.komputing.org/)上申请`rinkeby`测试币
+     拿到上一步产生的地址，在[水管](https://fauceth.komputing.org/)上申请`rinkeby`测试币
 ### 3.1.3. 获取一个目标地址
- 获取一个目标交易地址, 或者通过上面的步骤生产一个新的钱包并获取 `to address`
+    获取一个目标交易地址, 或者通过上面的步骤生产一个新的钱包并获取 `to address`
 ### 3.1.4. 使用 ethereum-client 广播交易到 测试链 rinkeby
 - 加载环境变量
 ```sh
@@ -509,7 +509,7 @@ source ./ethereum-client/env.sh
 
 ![6](./img/6.jpg)
 
-## 3.2. 参考文档
+# 4. 参考文档
 - [About the contract](https://cloud.ibm.com/docs/vpc?topic=vpc-about-contract_se#hpcr_contract_encrypt_workload)
 - [signing-images-with-docker-content-trust](https://docs.docker.com/engine/security/trust/#signing-images-with-docker-content-trust) 
 - [How to Sign Your Docker Images](https://www.cloudsavvyit.com/12388/how-to-sign-your-docker-images-to-increase-trust)
