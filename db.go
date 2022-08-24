@@ -23,8 +23,9 @@ func getDB(config *Config) *gorm.DB {
 	}
 
 	dsn := fmt.Sprintf(
-		"host=%s port=30025 user=%s dbname=%s password=%s sslrootcert=%s sslmode=verify-full TimeZone=Asia/Shanghai",
+		"host=%s port=%s user=%s dbname=%s password=%s sslrootcert=%s sslmode=verify-full TimeZone=Asia/Shanghai",
 		config.Postgress.Address,
+		config.Postgress.Port,
 		config.Postgress.Username,
 		config.Postgress.Dbname,
 		config.Postgress.Password,
