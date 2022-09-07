@@ -1,6 +1,6 @@
 services:
   signing-server:
-    image: au.icr.io/spark-demo/s390x-signing-server:v3
+    image: au.icr.io/poc-demo/signing-server:v1
     ports:
       - 80:80
       - 8080:8080

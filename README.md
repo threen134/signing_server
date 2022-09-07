@@ -230,6 +230,8 @@ git clone https://github.com/threen134/signing_server.git
 # 创建镜像
 cd ./signing_server
 docker build -t signing_server:v3  .
+# 如果是非s39x架构， 使用下面对命令
+docker buildx build --platform=linux/s390x  -t signing_server:v1 .  
 ```
 
 ### 2.5.3. tag镜像
@@ -238,14 +240,14 @@ docker build -t signing_server:v3  .
 # au.icr.io 为上文中 IBM CR的endpoint 
 # spark-demo 为上文创建的namespce
 # s390x-signing-server:v3 为image：tag*  
-docker tag signing_server:v3 au.icr.io/spark-demo/s390x-signing-server:v3
+docker tag signing_server:v1 au.icr.io/poc-demo/signing-server:v1
 ```
 
 ## 2.6. 版本经理检视代码后，执行签名操作。
 ###  2.6.1. 创建trust key
 ```sh
 # 创建的密钥需要输入密码，后面签名镜像的时候需要使用这个密钥读取私钥进行签名
-docker trust key generate spark1234
+docker trust key generate poc-test-sign-key
 ```
 ###  2.6.2. 开启DCT[(Docker Content Trust)](https://docs.docker.com/engine/security/trust/#signing-images-with-docker-content-trust)
 ```sh
@@ -257,22 +259,23 @@ export DOCKER_CONTENT_TRUST_SERVER=https://notary.au.icr.io
 ### 2.6.3. 上传镜像并签名
 ```sh
 # 登陆ibm container registry 
-ibmcloud login --sso --apikey <your api key> -g Default
+ibmcloud login --apikey <your api key> -g Default -r jp-tok
 # 设置区域
 ibmcloud cr region-set ap-south
 ibmcloud cr login 
 #为IBM CR 创建namespce，名字必须全局唯一
-ibmcloud cr namespace-add spark-demo
+ibmcloud cr namespace-add poc-demo
 # 上载镜像， 上传的时候需要输入私钥的密钥，如果是第一次使用notary，还需要设置notary的密码
-docker push au.icr.io/spark-demo/s390x-signing-server:v3
+docker push au.icr.io/poc-demo/signing-server:v1
 # 查看签名信息
-docker trust inspect au.icr.io/spark-demo/s390x-signing-server:v3 
+docker trust inspect au.icr.io/poc-demo/signing-server:v1 
 ```
+
 ### 2.6.4. 获取签名的公钥
  把这个公钥分享给`角色1`, 角色1需要把公钥加入到构建模版，后续镜像被部署的时候(拓扑图步骤9)，需要这个公钥验证签名来保证镜像的完整性。
 ```sh
 # cat ~/.docker/trust/tuf/au.icr.io/<username>/<imagename>/metadata/root.json
-cat ~/.docker/trust/tuf/au.icr.io/spark-demo/s390x-signing-server/metadata/root.json  |jq
+cat ~/.docker/trust/tuf/au.icr.io/poc-demo/signing-server/metadata/root.json  |jq
 ```
 **至此，版本经理或者CICD流程，构建了一个image，并且使用自己的私钥签名了这个image。**  
 
@@ -285,6 +288,15 @@ cd build
 tar czvf - -C compose . | base64 -w0
 H4sIAOG4/GIAA+3TTW+CMBwGcM77FD3syoui4k....
 ```
+备注：
+如果执行环境是MAC， 请使用 gnu版本的 tar 与 base64 
+```sh
+brew install coreutils
+brew install gnu-tar
+alias tar=gtar
+alias base64=gbase64
+```
+
 
 ### 2.7.2. 构建workload模版
 ```yaml
@@ -352,6 +364,16 @@ echo "hyper-protect-basic.${ENCRYPTED_PASSWORD}.${ENCRYPTED_WORKLOAD}"
 #当HPVS第一次构建的时候它会用私钥对密码进行解密，得到明文的密码后，用密码对workload进行解密  
 ```
 如果加密报这个错误 `unknown option '-pbkdf2'`，需要[升级openssh](https://gist.github.com/fernandoaleman/5459173e24d59b45ae2cfc618e20fe06)
+
+备注： 如果执行环境是MAC, 使用openssl 代替默认的 LibreSSL
+```
+brew update
+brew install openssl
+# if it is already installed, update it:
+brew upgrade openssl@1.1
+echo 'export PATH="/opt/homebrew/opt/openssl@3/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc 
+```
 
 ## 2.8. `角色2`构建ENV模版
 
